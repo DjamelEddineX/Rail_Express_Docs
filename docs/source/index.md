@@ -42,6 +42,7 @@ don't have to dig through the Hierarchy or Project window while iterating. It gi
 ```{toctree}
 :maxdepth: 2
 
+index
 level-creation
 environment
 rails
