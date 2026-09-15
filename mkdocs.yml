@@ -1,8 +1,0 @@
-nav:
-  - Overview: index.md  # Change to overview.md if that is your filename
-  - Levels Creation: level-creation.md
-  - Environment: environment.md
-  - Rails: rails.md
-  - Trains: trains.md
-  - Coins: coins.md
-  - Monetization: monetization.md
