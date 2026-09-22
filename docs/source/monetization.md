@@ -211,3 +211,92 @@ Play, Apple App Store, etc.) without a provider class of its own. There's nothin
 *ad* network into there; the only IAP-side switch is `useFakeStore` on the AdsSettings asset, which
 swaps real purchases for a simulated one for testing.
 ```
+
+## Privacy & Consent (UMP & ATT)
+
+### What UMP and ATT are, and why they're here
+
+Serving ads carries privacy obligations that exist independently of Rail Express or the Unity
+Asset Store — they come from law (GDPR/UK data protection rules) and from the ad platforms
+themselves (Google's and Apple's own policies). Rail Express wires the hooks for both directly
+into its ad initialization flow, so once you install the relevant SDK/package, consent and
+tracking-permission handling happen automatically before any ad is requested.
+
+- **Google UMP (User Messaging Platform)** shows a consent dialog to players in the EEA, UK, and
+  Switzerland before any ad request is made, asking whether they allow personalized advertising.
+  This is required by Google's EU User Consent Policy and by GDPR/UK GDPR for anyone serving ads
+  to those regions — it isn't optional once **Ads Enabled** is on and you're targeting those
+  players. UMP ships bundled inside the same Google Mobile Ads Unity plugin you already import for
+  AdMob (see {ref}`AdMob <monetization:admob>` above) — there is nothing extra to download for UMP
+  itself.
+- **Apple ATT (App Tracking Transparency)**, and the IDFA (Identifier for Advertisers) it gates
+  access to, is Apple's iOS 14.5+ requirement that apps show the system tracking-permission prompt
+  before tracking a user or accessing their device's advertising identifier. Without requesting
+  this properly, ad networks can't personalize or attribute ads on iOS, and Apple can reject a
+  submission that tracks users without asking.
+
+Rail Express does not, and can't, decide any of this for you — how you word your consent
+messaging, which regions you target, and your actual privacy policy are all things only you as the
+publisher can set. What the template provides is the *hook*: the moment in `AdsManager`'s startup
+where consent and tracking-permission requests happen, wired in before any ad provider
+initializes, using each SDK's own official Google/Apple-provided flow.
+
+### Where to configure it
+
+Everything lives in the **Privacy & Consent** section of the AdsSettings asset, directly above
+**Reward & In-App Purchase**:
+
+```
+Assets/Rail Express/Data/AdsSettings
+```
+
+- **Request Consent Before Ads** — when on (default), `AdsManager` runs Google UMP's consent flow
+  (requesting the latest consent state, then showing the consent form if one is required for that
+  player) before any ad provider initializes. Ad providers only start setting up once the flow
+  completes. If the AdMob SDK/UMP isn't imported, this toggle has no effect and providers
+  initialize immediately, exactly as before.
+- **Request App Tracking Authorization** — when on (default), the game requests iOS App Tracking
+  Transparency authorization at startup. This only does anything on iOS, and only once the
+  Advertising Support package (below) is installed — otherwise it's a no-op everywhere else.
+
+Just like the AdMob and LevelPlay foldouts further down the asset, this section shows a live
+detected/not-detected status for each dependency:
+
+- **Google UMP** — turns green once the AdMob SDK is imported (UMP is part of that same plugin).
+- **iOS Advertising Support** — turns green once the Advertising Support package described below
+  is installed.
+
+Both statuses update automatically — you never need to type a scripting define by hand.
+
+```{note}
+UMP is specific to Google/AdMob. If you're using AppLovin (MAX) or LevelPlay (ironSource) instead
+of, or alongside, AdMob, those mediation platforms ship their own separate consent-management
+flows (AppLovin's Terms and Privacy Policy flow, ironSource's own consent APIs) that are outside
+what this toggle controls. Check that network's own documentation if AdMob isn't your provider.
+```
+
+### Enabling iOS ATT support
+
+The App Tracking Transparency APIs aren't part of the core Unity engine — they come from Unity's
+official **Advertising Support** package, which also handles linking Apple's
+`AppTrackingTransparency` framework into the Xcode build for you.
+
+1. Open **Window > Package Manager**.
+2. Set the source dropdown at the top-left to **Unity Registry** (or use the **+** button and
+   **Add package by name**).
+3. Search for **iOS 14 Advertising Support** (package ID `com.unity.ads.ios-support`) and click
+   **Install**.
+4. Back on the AdsSettings asset, open the **Privacy & Consent** section — **iOS Advertising
+   Support** now shows as detected, and the ATT request is active.
+5. Confirm **Request App Tracking Authorization** is checked.
+6. Open **Assets > Google Mobile Ads > Settings** and fill in **User Tracking Usage Description**
+   with the sentence Apple will show inside the system permission prompt, for example:
+
+   ```
+   This identifier will be used to deliver personalized ads to you.
+   ```
+
+   Apple requires this string to be present in your app's Info.plist and will reject a submission
+   that requests tracking without it, regardless of which package triggers the prompt.
+7. Build for iOS. The system tracking prompt now appears automatically at launch, before any ad
+   provider initializes.
