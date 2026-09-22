@@ -114,3 +114,100 @@ matching plugin is present.
 
 7. Run **Assets > External Dependency Manager > Android Resolver > Resolve**.
 8. Your game is ready to publish.
+
+### + Add your custom
+
+Every provider — including **Dummy**, AdMob, and LevelPlay above — is a plain C# class that
+implements `IAdProvider`. `AdsManager` never talks to a network SDK directly; it only calls
+methods on whichever `IAdProvider` is assigned to each ad type. Adding your own network means
+writing one more class that speaks the same interface.
+
+```
+Assets/Rail Express/Scripts/Monetization/Core/IAdProvider.cs
+Assets/Rail Express/Scripts/Monetization/Core/AdsManager.cs
+Assets/Rail Express/Scripts/Monetization/Providers/Dummy/DummyHandler.cs
+```
+
+`IAdProvider` is small:
+
+```csharp
+public interface IAdProvider
+{
+    bool IsInitialized { get; }
+    bool HasInterstitialLoaded { get; }
+    bool HasRewardedLoaded { get; }
+
+    void Initialize(AdSettings settings, Action onInitialized);
+    void ShowBanner();
+    void HideBanner();
+    void ShowInterstitial(Action<bool> onClosed);
+    void ShowRewarded(Action<bool> onRewardResult);
+}
+```
+
+`AdsManager` calls `Initialize` once per ad type at startup (or on demand, depending on **Load Ads
+On Start**), then calls `ShowInterstitial`/`ShowRewarded` with a callback your provider must invoke
+with `true` (ad watched/closed successfully) or `false` (failed, skipped, or timed out). It also
+runs its own timeout watchdog around that callback, so your provider doesn't need one of its own —
+just call it exactly once per request.
+
+**Steps:**
+
+1. Add a settings block for your network to `AdSettings.cs`, next to the existing `AdMob
+   Settings` / `LevelPlay Settings` / `AppLovin Settings` headers — typically an app key/ID and one
+   ad unit ID per ad type you support:
+
+   ```csharp
+   [Header("MyNetwork Settings")]
+   public string myNetworkAppId = "";
+   public string myNetworkAndroidBannerId = "";
+   public string myNetworkAndroidInterstitialId = "";
+   public string myNetworkAndroidRewardedId = "";
+   ```
+
+2. Add your network to the `AdProvider` enum in the same file:
+
+   ```csharp
+   public enum AdProvider { Dummy, AdMob, LevelPlay, AppLovin, MyNetwork }
+   ```
+
+   This is what makes it selectable from the **Banner Type** / **Interstitial Type** / **Rewarded
+   Video Type** dropdowns already described above.
+
+3. Create your provider class under
+   `Assets/Rail Express/Scripts/Monetization/Providers/MyNetwork/`, implementing `IAdProvider`.
+   Use `DummyHandler.cs` as the shape to follow, and your network's own SDK calls inside each
+   method — initialize the SDK in `Initialize`, load/show ads in the `Show...` methods, and invoke
+   the callback you were given when the SDK reports a result.
+
+4. Register the new class in `AdsManager.CreateProvider`:
+
+   ```csharp
+   private IAdProvider CreateProvider(AdProvider provider)
+   {
+       switch (provider)
+       {
+           case AdProvider.Dummy: return new DummyHandler();
+           case AdProvider.AdMob: return new AdMobHandler();
+           case AdProvider.AppLovin: return new AppLovinHandler();
+           case AdProvider.LevelPlay: return new LevelPlayHandler();
+           case AdProvider.MyNetwork: return new MyNetworkHandler();
+           default: return new DummyHandler();
+       }
+   }
+   ```
+
+5. Import your network's SDK, add whatever manifest/gradle changes it requires (the same pattern
+   as step 4–6 of the LevelPlay setup above), and select **MyNetwork** on the AdsSettings asset for
+   each ad type you've implemented.
+
+Unlike the built-in providers, adding a new one is not purely an Inspector task — steps 2 and 4
+edit project code, so this isn't something a non-programmer buyer can do from the Inspector alone.
+
+```{note}
+`IAPManager` is a separate system from `AdsManager` and doesn't use `IAdProvider` — it talks to
+Unity IAP (`com.unity.purchasing`) directly, which already supports every major store (Google
+Play, Apple App Store, etc.) without a provider class of its own. There's nothing to plug a custom
+*ad* network into there; the only IAP-side switch is `useFakeStore` on the AdsSettings asset, which
+swaps real purchases for a simulated one for testing.
+```
